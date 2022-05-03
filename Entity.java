@@ -1,55 +1,257 @@
+import java.util.ArrayList;
+
 public class Entity {
 
-    // tolerance for comparing values
-    private static double TOLERANCE = 1.0e-3;
+    // static methods ----------------------------------------------------------
 
-    // collision polygon for entity
+    // resolve a collision between two entities, e1 is assumed as aggressor
+    public static void resolveCollision(Entity e1, Entity e2, Vector mtv) {
+        e1.translate(Vector.scale(mtv, 0.5));
+        e2.translate(Vector.scale(mtv, -0.5));
+
+        Vector e1Vel = new Vector();
+        Vector e2Vel = new Vector();
+        // calculate new velocities (assume perfect elastic collisions)
+        double m1 = e1.area();
+        double m2 = e2.area();
+        double denom = m1 + m2;
+
+        e1Vel.x = ((m1 - m2) / denom) * e1.vel.x + (2 * m2 / denom) * e2.vel.x;
+        e1Vel.y = ((m1 - m2) / denom) * e1.vel.y + (2 * m2 / denom) * e2.vel.y;
+
+        e2Vel.x = (2 * m1 / denom) * e1.vel.x + ((m2 - m1) / denom) * e2.vel.x;
+        e2Vel.y = (2 * m1 / denom) * e1.vel.y + ((m2 - m1) / denom) * e2.vel.y;
+
+        e1.vel = e1Vel;
+        e2.vel = e2Vel;
+    }
+
+    // instance vars -----------------------------------------------------------
+
+    // physical properties
     protected CollidablePolygon poly;
-
-    // velocity for entity
     protected Vector vel;
-
-    // health for the entity
+    protected int sides;
+    protected double hpStat;
     protected double hp;
+    protected double dmg;
+    protected double homeChance = 0;
+    protected double rotation = 0; // degrees
+    protected double angularVel = 0;
+    protected double dropChance;
+    protected double reloadTime;
+    protected double spd;
+    protected double max_speed;
+    protected double projSpd;
 
-    // rotational angle for the entity (degrees)
-    protected double rotation;
-
-    // angular velocity
-    protected double angularVel;
-
-    // character tag used for differentiating which bullets damage what
+    // differentiating entities
     protected char tag;
+
+    // head pointer
+    protected Point head;
+
+    // points for killing this entity
+    protected double points;
+
+    protected ArrayList<Buff> buffs = new ArrayList<>();
+    protected Clock.Timer TIMER;
+
+    // constructors ------------------------------------------------------------
 
     // default constructor
     public Entity() {
     }
 
-    // constructor with values
-    public Entity(Point[] verts, Vector vel, double hp) {
-        poly = new CollidablePolygon(verts);
-        this.vel = vel;
+    // constructor using a base polygon
+    public Entity(BasePolygon b, Vector vel, double hp) {
+        this.vel = new Vector(vel);
         this.hp = hp;
-        rotation = 0;
-        angularVel = 0;
+        poly = new CollidablePolygon(b);
+        _init();
     }
 
     // constructor with values
-    public Entity(double[] x, double[] y, Vector vel, double hp) {
+    public Entity(double[] x, double[] y, Vector vel) {
+        this.vel = new Vector(vel);
         poly = new CollidablePolygon(x, y);
-        this.vel = vel;
-        this.hp = hp;
-        rotation = 0;
-        angularVel = 0;
+        hp = poly.area();
+        _init();
     }
 
     // constructor using a base polygon
-    public Entity(BasePolygon b, Vector vel, double hp) {
+    public Entity(BasePolygon b, Vector vel) {
+        this.vel = new Vector(vel);
         poly = new CollidablePolygon(b);
-        this.vel = vel;
-        this.hp = hp;
+        hp = poly.area();
+        _init();
+    }
+
+    // not a constructor but avoids repetition
+    private void _init() {
+        sides = poly.getN();
         rotation = 0;
-        angularVel = 0;
+        hpStat = hp;
+        head = poly.verts[0];
+        dropChance = 0;
+        points = 0;
+    }
+
+    // getters -----------------------------------------------------------------
+
+    public char getTag() {
+        return tag;
+    }
+
+    public double getHpStat() {
+        return hpStat;
+    }
+
+    public double getHp() {
+        return hp;
+    }
+
+    public double getAngularVel() {
+        return angularVel;
+    }
+
+    public double getPoints() {
+        return points;
+    }
+
+    public double getHomeChance() {
+        return homeChance;
+    }
+
+    public double getRadius() {
+        return poly.getRadius();
+    }
+
+    public CollidablePolygon getPoly() {
+        return new CollidablePolygon(poly);
+    }
+
+    public Vector getVel() {
+        return new Vector(vel);
+    }
+
+    public Point getHead() {
+        return new Point(head);
+    }
+
+    // setters -----------------------------------------------------------------
+
+    public void setPoly(CollidablePolygon poly) {
+        this.poly = new CollidablePolygon(poly);
+    }
+
+    public void setVel(Vector vel) {
+        this.vel = new Vector(vel);
+    }
+
+    public void setHpStat(double hpStat) {
+        this.hpStat = hpStat;
+    }
+
+    public void setHp(double hp) {
+        this.hp = hp;
+    }
+
+    public void setRotation(double rotation) {
+        this.rotation = rotation;
+    }
+
+    public void setAngularVel(double angularVel) {
+        this.angularVel = angularVel;
+    }
+
+    public void setTag(char tag) {
+        this.tag = tag;
+    }
+
+    public void setHead(Point head) {
+        this.head = new Point(head);
+    }
+
+    public void setPoints(double points) {
+        this.points = points;
+    }
+
+    public void setHomeChance(double homeChance) {
+        this.homeChance = homeChance;
+    }
+
+    public void setPosition(Point p) {
+        poly.recenter(p);
+    }
+
+    public void setTimerDuration(String key, double duration) {
+        TIMER.changeDuration(key, duration);
+    }
+
+    // other methods -----------------------------------------------------------
+
+    // return if the entity is dead (hp == 0)
+    public boolean isDead() {
+        return hp < Constants.TOLERANCE;
+    }
+
+    // return if then entity can be damaged
+    public boolean canBeDamaged() {
+        return !isDead();
+    }
+
+    // return if entity can drop pickup items
+    protected boolean canDropBuffs() {
+        return StdRandom.uniform() < dropChance;
+    }
+
+    // return the rotation of this entity, degrees
+    public double getRotation() {
+        return rotation;
+    }
+
+    // return the area of this entity
+    public double area() {
+        return poly.area();
+    }
+
+    // get the center of the entity
+    public Point center() {
+        return poly.center();
+    }
+
+    // return the minimum translation vector for this collision
+    public Vector collide(Entity e) {
+        return poly.collide(e.poly);
+    }
+
+    // drop all buffs
+    public ArrayList<Buff> dropBuffs() {
+        Point c = center();
+        buffs.forEach(b -> b.setPosition(c));
+        return buffs;
+    }
+
+    // add a buff to the entity
+    public void addBuff(Buff d) {
+        buffs.add(d);
+        d.apply(this);
+    }
+
+    // generate buffs
+    protected void genBuffs(int drops) {
+        if (canDropBuffs()) {
+            Point c = center();
+
+            for (int i = 0; i < drops; i++) {
+                addBuff(Buff.genBuff(c.x, c.y));
+            }
+        }
+    }
+
+    // modify vel
+    public void modifyVel(Vector v) {
+        vel.add(v);
     }
 
     // translate method
@@ -67,47 +269,17 @@ public class Entity {
         translate(Vector.scale(vel, dt));
     }
 
-    // set the velocity of this entity
-    public void setVelocity(Vector v) {
-        vel.copy(v);
-    }
-
-    // return tag
-    public char getTag() {
-        return tag;
-    }
-
     // rotate the entity
     public void rotate(double degrees) {
-        rotation += degrees;
+        rotation = (rotation + degrees) % 360;
         poly.rotate(degrees);
-    }
-
-    // return the rotation of this entity, degrees
-    public double getRotation() {
-        return rotation;
-    }
-
-    // return the area of this entity
-    public double area() {
-        return poly.area();
-    }
-
-    // return the minimum translation vector for this collision
-    public Vector collide(Entity e) {
-        return poly.collide(e.poly);
     }
 
     // update method (updates state and position)
     public void update(double dt) {
         move(dt);
         rotate(angularVel * dt);
-        vel.setOrigin(poly.centroid());
-    }
-
-    // return if the entity is dead (hp == 0)
-    public boolean isDead() {
-        return hp < TOLERANCE;
+        vel.setOrigin(poly.center());
     }
 
     // kill the entity
@@ -118,61 +290,42 @@ public class Entity {
     // damage this entity
     public void damage(double damage) {
         hp -= damage;
-        hp = Math.max(hp, 0); // clamp hp to 0
+        if (isDead()) {
+            die();
+        }
+    }
+
+    public ArrayList<VFX.Effect> genBuffParticles() {
+        ArrayList<VFX.Effect> particles = new ArrayList<>();
+        double chance = Constants.BASE_BUFF_PARTICLE_CHANCE / buffs.size();
+        for (Buff b : buffs) {
+            if (StdRandom.uniform() < chance) {
+                double mag = StdRandom.uniform() * 1 - 0.5;
+                double degrees = StdRandom.uniform() * 360;
+                Vector vel = Vector.genVector(mag, degrees);
+                double size = StdRandom.uniform() * 0.5 + 0.5;
+                particles.add(new VFX.Glow(center(), vel, size, b.glow));
+            }
+        }
+        return particles;
     }
 
     // draw method
     public void draw(Vector scroll) {
-        poly.draw(scroll);
+        poly.drawOutline(scroll, Constants.PRIMARY_COLOR);
     }
 
-    // resolve a collision between two entities, e1 is assumed as aggressor
-    public static void resolveCollision(Entity e1, Entity e2, Vector mtv) {
-        e1.translate(Vector.scale(mtv, 0.5));
-        e2.translate(Vector.scale(mtv, -0.5));
+    // draw the offset stuff
+    public void drawUnderline(Vector scroll) {
+        poly.drawOutline(Vector.add(scroll, Constants.ACCENT_OFFSET),
+                         Constants.ACCENT_COLOR);
+    }
 
-        Vector thisVel = new Vector();
-        Vector thatVel = new Vector();
-        // calculate new velocities (assume perfect elastic collisions)
-        double m1 = e1.area();
-        double m2 = e2.area();
-        double denom = m1 + m2;
-
-        thisVel.x = ((m1 - m2) / denom) * e1.vel.x + (2 * m2 / denom) * e2.vel.x;
-        thisVel.y = ((m1 - m2) / denom) * e1.vel.y + (2 * m2 / denom) * e2.vel.y;
-
-        thatVel.x = (2 * m1 / denom) * e1.vel.x + ((m2 - m1) / denom) * e2.vel.x;
-        thatVel.y = (2 * m1 / denom) * e1.vel.y + ((m2 - m1) / denom) * e2.vel.y;
-
-        e1.setVelocity(thisVel);
-        e2.setVelocity(thatVel);
+    // debug drawing method
+    public void drawDebug(Vector scroll) {
+        poly.drawDebug(scroll);
     }
 
     public static void main(String[] args) {
-
-        double scale = 100;
-        StdDraw.setScale(0, 100);
-        StdDraw.enableDoubleBuffering();
-
-        Entity e = new Entity(BasePolygon.generateShape(5, 10), new Vector(0.1, 0.1), 0);
-        e.translate(10, 10);
-
-        Clock clock = new Clock();
-
-        Vector scroll = new Vector();
-
-        clock.start();
-        while (true) {
-
-            double dt = clock.tick();
-
-            StdDraw.clear();
-
-            e.update(dt);
-
-            e.draw(scroll);
-
-            StdDraw.show();
-        }
     }
 }

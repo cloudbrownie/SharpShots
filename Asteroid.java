@@ -2,17 +2,15 @@ import java.util.ArrayList;
 
 public class Asteroid extends Entity {
 
+    // static vars -------------------------------------------------------------
+
     // maximum number of vertices for an asteroid
     public static final int MAX_VERTICES = 15;
 
     // size threshold needed to generate more asteroids (kinda arbitrary)
-    public static final double PARENT_SIZE_THRESHOLD = 35;
+    public static final double PARENT_SIZE_THRESHOLD = 5;
 
-    // spawn angle in degrees
-    public static final int SPAWN_ANGLE = 45;
-
-    // store max side radius
-    private double radius;
+    // static methods ----------------------------------------------------------
 
     // return an asteroid given a center position and a velocity
     public static Asteroid genAsteroid(double x, double y, Vector vel,
@@ -53,67 +51,77 @@ public class Asteroid extends Entity {
         return a;
     }
 
-    // return a random asteroid (used in main method for testing purposes)
-    public static Asteroid genRandomAsteroid(double scale) {
-
-        // generate the center of the asteroid
-        double x = StdRandom.uniform() * scale;
-        double y = StdRandom.uniform() * scale;
+    // return a random asteroid using just a position
+    public static Asteroid genRandomAsteroid(Point p, double scale) {
 
         // create some random velocity
-        Vector vel = new Vector(StdRandom.uniform() - 0.5, StdRandom.uniform() - 0.5);
+        Vector vel = new Vector(StdRandom.uniform() - 0.5,
+                                StdRandom.uniform() - 0.5);
 
         double length = StdRandom.uniform() * scale * 0.03 + scale * 0.03;
 
-        return genAsteroid(x, y, vel, length);
+        return genAsteroid(p.x, p.y, vel, length);
     }
 
-    // generate a random spawn angle
-    public static double genSpawnAngle() {
-        return StdRandom.uniform(SPAWN_ANGLE) - SPAWN_ANGLE / 2;
+    public static ArrayList<Asteroid> genChildren(Asteroid a) {
+        ArrayList<Asteroid> children = new ArrayList<>();
+
+        double size = a.getRadius() * 0.9;
+        double cr = size * StdRandom.uniform(0.4, 0.5);
+        while (cr > 0.5) {
+            // generate values for new child
+            Vector vel = new Vector(a.vel);
+            vel.rotate(StdRandom.uniform() * 360);
+            vel.scale(StdRandom.uniform() * 0.5 + 1.5);
+
+            Point c = a.center();
+            c.x += StdRandom.uniform() * cr * 0.3 - cr * 0.7;
+            c.y += StdRandom.uniform() * cr * 0.3 - cr * 0.7;
+            Asteroid na = Asteroid.genAsteroid(c.x, c.y, vel, cr);
+            children.add(na);
+            size -= cr;
+            cr = size * StdRandom.uniform(0.3, 0.4);
+        }
+
+        return children;
     }
 
-    // asteroid constructor with point array
-    public Asteroid(Point[] points, Vector vel, double radius) {
-        poly = new CollidablePolygon(points);
-        this.vel = vel;
-        hp = area() * 3;
-        tag = 'a';
-        this.radius = radius;
-    }
+    // instance vars -----------------------------------------------------------
+
+    // store max side radius
+    private double radius;
+    private boolean isLucky;
+
+    // constructors ------------------------------------------------------------
 
     // asteroid constructor with parallel arrays
     public Asteroid(double[] x, double[] y, Vector vel, double radius) {
-        poly = new CollidablePolygon(x, y);
-        this.vel = vel;
-        hp = area() * 3;
-        tag = 'a';
+        super(x, y, vel);
         this.radius = radius;
+
+        hpStat = area() * 2;
+        hp = hpStat;
+        tag = Constants.ASTEROID_TAG;
+        points = area() / 2;
+        angularVel = StdRandom.uniform() * 10 - 5;
+        isLucky = StdRandom.uniform() < 0.01;
+        if (isLucky) {
+            points = 100;
+        }
     }
+
+    // getters -----------------------------------------------------------------
 
     // return radius
     public double getRadius() {
         return radius;
     }
 
-    // add velocity to this object
-    public void addVelocity(Vector v) {
-        vel.add(v);
-    }
-
-    // change the velocity
-    public void setVelocity(Vector v) {
-        vel.copy(v);
-    }
+    // other methods -----------------------------------------------------------
 
     // check if the size of the asteroid is big enough to spawn more asteroids
     public boolean canSpawn() {
         return poly.area() >= PARENT_SIZE_THRESHOLD;
-    }
-
-    // return the center of the asteroid
-    public Point centroid() {
-        return poly.centroid();
     }
 
     // area method
@@ -121,105 +129,16 @@ public class Asteroid extends Entity {
         return poly.area();
     }
 
-    // debug drawing method
-    public void drawDebug(Vector scroll) {
-        poly.drawDebug(scroll);
-        vel.drawDebug(scroll);
-    }
+    public void draw(Vector scroll) {
+        super.draw(scroll);
 
-    // draw the velocity vector of the asteroid
-    public void drawVel(Vector scroll) {
-        Vector scaled = Vector.scale(vel, 5);
-        scaled.drawDebug(scroll);
+        if (isLucky) {
+            double[] x = poly.xVerts(scroll.x);
+            double[] y = poly.yVerts(scroll.y);
+            VFX.glow(x, y, Constants.LUCKY_GLOW, 1);
+        }
     }
 
     public static void main(String[] args) {
-
-        double scale = 100;
-        StdDraw.enableDoubleBuffering();
-        StdDraw.setScale(0, scale);
-
-        ArrayList<Asteroid> asteroids = new ArrayList<Asteroid>();
-        double length = scale * 0.05;
-        asteroids.add(genAsteroid(scale * 0.5, scale, new Vector(0, -0.5), length));
-        asteroids.add(genAsteroid(0, scale * 0.5, new Vector(0.5, 0), length));
-        asteroids.add(genAsteroid(scale, scale * 0.5, new Vector(-0.5, 0), length));
-        asteroids.add(genAsteroid(scale * 0.5, 0, new Vector(0, 0.5), length));
-
-        Player p = new Player(50, 50, 5);
-
-        Clock clock = new Clock();
-
-        Vector scroll = new Vector();
-
-        clock.start();
-        while (true) {
-
-            double dt = clock.tick();
-
-            StdDraw.clear();
-
-            // reset if spacebar hit
-            if (StdDraw.hasNextKeyTyped()) {
-                char key = StdDraw.nextKeyTyped();
-                if (key == ' ') {
-                    asteroids.clear();
-                    asteroids.add(genAsteroid(scale * 0.5, scale,
-                                              new Vector(0, -0.5), length));
-                    asteroids.add(genAsteroid(0, scale * 0.5,
-                                              new Vector(0.5, 0), length));
-                    asteroids.add(genAsteroid(scale, scale * 0.5,
-                                              new Vector(-0.5, 0), length));
-                    asteroids.add(genAsteroid(scale * 0.5, 0,
-                                              new Vector(0, 0.5), length));
-                }
-                else if (key == 'o') {
-                    asteroids.clear();
-                    asteroids.add(genAsteroid(scale * 0.5, scale * 0.5,
-                                              new Vector(0, 0), length));
-                    asteroids.add(genAsteroid(scale * 0.5, scale * 0.5,
-                                              new Vector(0, 0), length));
-                }
-            }
-
-            for (Asteroid a : asteroids) {
-                a.update(dt);
-            }
-
-            p.update(dt);
-
-            p.handleInputs();
-
-            for (int i = 0; i < asteroids.size() - 1; i++) {
-                Asteroid a = asteroids.get(i);
-
-                for (int j = i + 1; j < asteroids.size(); j++) {
-                    Asteroid b = asteroids.get(j);
-                    Vector mtv = a.collide(b);
-                    if (mtv.isNonZero()) {
-                        Entity.resolveCollision(a, b, mtv);
-                    }
-
-                    Vector pmtv = a.collide(p);
-                    if (pmtv.isNonZero()) {
-                        p.die();
-                    }
-                }
-            }
-
-
-            // update the asteroids
-            for (Asteroid asteroid : asteroids) {
-                asteroid.draw(scroll);
-            }
-
-            p.draw(scroll);
-
-            // kill asteroids that are too far off screen
-
-            StdDraw.show();
-            StdDraw.pause(20);
-        }
-
     }
 }

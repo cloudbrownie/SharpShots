@@ -1,12 +1,13 @@
 public class Point {
 
-    public static double RADIUS = 1;
+    // static vars -------------------------------------------------------------
+    public static final double RADIUS = 1;
 
-    // instance attrs
-    public double x;
-    public double y;
+    // instance vars -----------------------------------------------------------
+    protected double x;
+    protected double y;
 
-    // default constructor
+    // constructors ------------------------------------------------------------
     public Point() {
     }
 
@@ -28,11 +29,18 @@ public class Point {
         y = p.y + v.y;
     }
 
+    // other methods -----------------------------------------------------------
+
     // return distance between two points
     public double distanceTo(Point p) {
         double dx = p.x - x;
         double dy = p.y - y;
         return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // to string method
+    public String toString() {
+        return String.format("(%s, %s)", x, y);
     }
 
     // add points
@@ -57,18 +65,6 @@ public class Point {
         x = px * cos - py * sin;
         y = py * cos + px * sin;
 
-    }
-
-    // draw the point
-    public void draw(Vector scroll) {
-        StdDraw.circle(x - scroll.x, y - scroll.y, RADIUS);
-    }
-
-    // subtract points
-
-    // to string method
-    public String toString() {
-        return String.format("(%s, %s)", x, y);
     }
 
     public static void main(String[] args) {

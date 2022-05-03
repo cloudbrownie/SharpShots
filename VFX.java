@@ -3,23 +3,118 @@ import java.util.ArrayList;
 
 public class VFX {
 
+    // static vars -------------------------------------------------------------
+
+    private static final double EXHAUST_RAD = Constants.SCALE * 0.005;
+    private static final double EXHAUST_DEAD_RAD = EXHAUST_RAD * 0.3;
+    private static final double SPARK_DEAD_LEN = Constants.SCALE * 0.01;
+    private static final double SPARK_MAX_LEN = Constants.SCALE * 0.05;
+    private static final double PULSE_DEAD_TOLERANCE = Constants.SCALE * 0.005;
+
+    private static final Color[] EXHAUST_COLORS = {
+            new Color(255, 50, 50, 10), new Color(255, 69, 0, 10),
+            new Color(255, 191, 0, 10), new Color(255, 168, 18, 10)
+    };
+
+    // static methods ----------------------------------------------------------
+
+    private static void throwIntensityError(double intensity) {
+        if (intensity < 0.1 || intensity > 1) {
+            throw new IllegalArgumentException("0.1 <= Intensity <= 1");
+        }
+
+    }
+
+    // render a glow effect
+    public static void glow(Point p, double rad, Color glow, double intensity) {
+        throwIntensityError(intensity);
+        StdDraw.setPenColor(glow);
+
+        double basePenSize = StdDraw.getPenRadius();
+        double penSize = basePenSize;
+
+        int iterations = (int) (10 * intensity);
+
+        for (int i = 0; i < iterations; i++) {
+            StdDraw.circle(p.x, p.y, rad);
+
+            penSize *= 1.5;
+            StdDraw.setPenRadius(penSize);
+        }
+
+        StdDraw.setPenRadius(basePenSize);
+    }
+
+    // render a glowing polygon
+    public static void glow(double[] x, double[] y, Color glow,
+                            double intensity) {
+        throwIntensityError(intensity);
+        StdDraw.setPenColor(glow);
+
+        double basePenSize = StdDraw.getPenRadius();
+        double penSize = basePenSize;
+
+        int iterations = (int) (10 * intensity);
+
+        for (int i = 0; i < iterations; i++) {
+            StdDraw.polygon(x, y);
+
+            penSize *= 1.5;
+            StdDraw.setPenRadius(penSize);
+        }
+
+        StdDraw.setPenRadius(basePenSize);
+    }
+
+    public static Spark genExhaustSpark(Point p, Vector vel) {
+        Vector newVel = new Vector(vel);
+        newVel.invert();
+        p.add(newVel);
+        newVel.scale(StdRandom.uniform() * 0.5 + 0.25);
+        newVel.rotate(StdRandom.uniform() * 90 - 45);
+        return new Spark(p, newVel);
+    }
+
+    public static Color lerp(Color c1, Color c2, double value) {
+        double r1 = c1.getRed();
+        double g1 = c1.getGreen();
+        double b1 = c1.getBlue();
+        double a1 = c1.getAlpha();
+        double r2 = c2.getRed();
+        double g2 = c2.getGreen();
+        double b2 = c2.getBlue();
+        double a2 = c2.getAlpha();
+        int r = clampRGB((int) (r1 + ((r2 - r1) * value)));
+        int g = clampRGB((int) (g1 + ((g2 - g1) * value)));
+        int b = clampRGB((int) (b1 + ((b2 - b1) * value)));
+        int a = clampRGB((int) (a1 + ((a2 - a1) * value)));
+        return new Color(r, g, b, a);
+    }
+
+    private static int clampRGB(int val) {
+        val = Math.min(255, val);
+        val = Math.max(0, val);
+        return val;
+    }
+
     // subclasses --------------------------------------------------------------
 
     // effect subclass
-    public class Effect {
+    public static class Effect {
+
+        // instance vars -------------------------------------------------------
 
         // life boolean
         protected boolean dead = false;
+
+        // constructors --------------------------------------------------------
 
         // default constructor
         public Effect() {
 
         }
 
-        // draw method
-        public void draw(Vector scroll) {
-
-        }
+        // other methods -------------------------------------------------------
 
         // update method
         public void update(double dt) {
@@ -36,36 +131,37 @@ public class VFX {
             return dead;
         }
 
+        // draw method
+        public void draw(Vector scroll) {
+
+        }
     }
 
     // circular glow particle subclass
-    public class GlowParticle extends Effect {
+    public static class Glow extends Effect {
 
-        // glow color
+        // exhaust attrs
         private Color glow;
-
-        // position as x and y (point obj is unnecessary)
-        private double x;
-        private double y;
-
-        // store a point in case the glow particle needs to follow a particle
-        private Point follow;
-
-        // glow radius
+        private Color glowLerp;
+        private Point p;
+        private Vector vel;
         private double radius;
-        private double innerRadius;
-
-        // glow intensity
-        private double intensity;
+        private double lerpRate = 5;
 
         // constructor
-        public GlowParticle(double x, double y, double radius, Color glow) {
+        public Glow(Point p, Vector vel, double radius, Color glow) {
             this.glow = glow;
-            this.x = x;
-            this.y = y;
-            this.radius = radius * 3;
-            innerRadius = radius;
-            intensity = 1;
+            this.p = new Point(p);
+            this.vel = new Vector(vel);
+            this.radius = radius;
+        }
+
+        public Glow(Point p, Vector vel, double radius, Color g1, Color g2) {
+            this.p = new Point(p);
+            this.vel = new Vector(vel);
+            this.radius = radius;
+            glow = g1;
+            glowLerp = g2;
         }
 
         // reset the alpha value of the glow
@@ -84,113 +180,190 @@ public class VFX {
             return glow;
         }
 
-        // set the point to follow method
-        public void followPoint(Point p) {
-            follow = p;
-        }
+        // update method
+        public void update(double dt) {
+            p.add(vel);
 
-        // set the intensity for the glow effect
-        public void setIntensity(double intensity) {
-            if (intensity <= 0 || intensity > 1) {
-                throw new IllegalArgumentException("0.0 < Clarity < 1.0");
+            radius -= radius * 0.075 * dt;
+            if (radius < EXHAUST_DEAD_RAD) {
+                die();
             }
-            this.intensity = intensity;
-        }
 
-        // set the inner radius for the glow intensity to stop at
-        public void setInnerRadius(double innerRadius) {
-            this.innerRadius = innerRadius;
+            if (glowLerp != null) {
+                glow = lerp(glow, glowLerp, dt / lerpRate);
+            }
         }
 
         // draw method
         public void draw(Vector scroll) {
+            StdDraw.setPenColor(Constants.PRIMARY_COLOR);
+            StdDraw.circle(p.x - scroll.x, p.y - scroll.y, radius);
 
-            Color save = StdDraw.getPenColor();
-            StdDraw.setPenColor(glow);
-
-            // calculate intensity steps
-            double area = radius - innerRadius;
-            double radStep = area * (1.1 - intensity);
-            double xpos = x;
-            double ypos = y;
-            if (follow != null) {
-                xpos = follow.x;
-                ypos = follow.y;
-            }
-
-            // iterate for each step
-            for (double currRad = innerRadius; currRad < radius;
-                 currRad += radStep) {
-                // draw a glow circle
-                StdDraw.filledCircle(xpos, ypos, currRad);
-            }
-
-
-            StdDraw.setPenColor(save);
+            Point c = new Point(p);
+            c.subtract(scroll);
+            glow(c, radius * 3, glow, 1);
         }
     }
 
     // spark particle subclass
-    public class Spark extends Effect {
+    public static class Spark extends Effect {
+
+        // spark attrs
+        private Point p;
+        private Vector vel;
+
+        public Spark(Point p, Vector vel) {
+            this.p = new Point(p);
+            this.vel = new Vector(vel);
+        }
+
+        public void update(double dt) {
+            p.add(vel);
+            vel.subtract(vel.norm() * 0.1 * dt);
+            if (vel.norm() <= SPARK_DEAD_LEN) {
+                die();
+            }
+        }
+
+        public void draw(Vector scroll) {
+            double mag = vel.norm();
+            double angle = vel.rotAngle();
+            double hPI = Math.PI / 2;
+
+            double[] px = {
+                    p.x + mag * Math.cos(angle) - scroll.x,
+                    p.x + mag * Math.cos(angle + hPI) * 0.25 - scroll.x,
+                    p.x - mag * Math.cos(angle) * 1.5 - scroll.x,
+                    p.x + mag * Math.cos(angle - hPI) * 0.25 - scroll.x
+            };
+            double[] py = {
+                    p.y + mag * Math.sin(angle) - scroll.y,
+                    p.y + mag * Math.sin(angle + hPI) * 0.25 - scroll.y,
+                    p.y - mag * Math.sin(angle) * 1.5 - scroll.y,
+                    p.y - mag * Math.sin(angle + hPI) * 0.25 - scroll.y
+            };
+
+            StdDraw.setPenColor(Constants.PRIMARY_COLOR);
+            StdDraw.polygon(px, py);
+        }
 
     }
 
     // pulse subclass
-    public class Pulse extends Effect {
+    public static class Pulse extends Effect {
 
-    }
+        // pulse attrs
+        private Point p;
+        private double r2;
+        private double r1;
+        private double maxR;
+        private Color glow;
 
-    // static methods ----------------------------------------------------------
-
-    // render a glow effect
-    public static void glow(double x, double y, double radius, Color glow,
-                            double intensity) {
-        if (intensity <= 0.1 || intensity > 1) {
-            throw new IllegalArgumentException("0.1 <= Intensity < 1.0");
+        public Pulse(Point p, double radius) {
+            this.p = new Point(p);
+            maxR = radius;
+            r2 = maxR / 2;
+            r1 = 0;
         }
 
-        Color save = StdDraw.getPenColor();
-        StdDraw.setPenColor(glow);
-
-        double radiusStep = radius * (1.1 - intensity);
-
-        // iterate for each radius step
-        for (double currRadius = 0; currRadius < radius - radiusStep;
-             currRadius += radiusStep) {
-            // draw the glow
-            StdDraw.filledCircle(x, y, currRadius);
+        public Pulse(Point p, double radius, Color glow) {
+            this.p = new Point(p);
+            this.glow = glow;
+            maxR = radius;
+            r2 = maxR / 2;
+            r1 = 0;
         }
 
-        StdDraw.setPenColor(save);
-    }
+        public void update(double dt) {
+            r2 += (maxR - r2) * 0.5 * dt;
+            r2 = Math.min(r2, maxR);
+            r1 += (maxR - r1) * 0.4 * dt;
+            if (r2 - r1 <= PULSE_DEAD_TOLERANCE) {
+                die();
+            }
+        }
 
+        public void draw(Vector scroll) {
+            StdDraw.setPenColor(Constants.PRIMARY_COLOR);
+            StdDraw.circle(p.x - scroll.x, p.y - scroll.y, r1);
+            StdDraw.circle(p.x - scroll.x, p.y - scroll.y, r2);
+            if (glow != null) {
+                glow(new Point(p.x - scroll.x, p.y - scroll.y), r2, glow, 1);
+            }
+        }
+    }
 
     // actual class stuff ------------------------------------------------------
 
     // store all effects in a single list
-    ArrayList<Effect> effects;
+    private ArrayList<Effect> effects;
 
     // constructor
     public VFX() {
         effects = new ArrayList<>();
     }
 
+    // restart method
+    public void clear() {
+        effects.clear();
+    }
+
+    // add effects
+    public void addEffects(ArrayList<Effect> effects) {
+        this.effects.addAll(effects);
+    }
+
     // add a glow particle
-    public void addGlow(Point p, double radius, Color glow, boolean follow) {
-        GlowParticle g = new GlowParticle(p.x, p.y, radius, glow);
-        g.setIntensity(1);
-        if (follow) {
-            g.followPoint(p);
+    public void addGlow(Point p, Vector vel, double radius, Color glow) {
+        Glow e = new Glow(p, vel, radius, glow);
+        effects.add(e);
+    }
+
+    // special glow particle
+    public void addExhaust(Point p, Vector vel) {
+        int i = StdRandom.uniform(EXHAUST_COLORS.length);
+        Vector newVel = new Vector(vel);
+        newVel.invert();
+        p.add(newVel);
+        newVel.scale(StdRandom.uniform() * 0.25 + 0.25);
+        newVel.rotate(StdRandom.uniform() * 45 - 22.5);
+        double radius = StdRandom.uniform() * EXHAUST_RAD / 2 + EXHAUST_RAD / 2;
+        effects.add(new Glow(p, newVel, radius, EXHAUST_COLORS[i],
+                             new Color(0, 0, 0, 10)));
+    }
+
+    // add a spark particle
+    public void addSparks(int n, Point p, Vector vel, double angleRange) {
+        for (int i = 0; i < n; i++) {
+            Vector v = new Vector(vel);
+            v.rotate(StdRandom.uniform() * angleRange - angleRange / 2);
+            v.scale(StdRandom.uniform(0.5, 2));
+            v.clamp(SPARK_MAX_LEN);
+            effects.add(new Spark(p, v));
         }
-        effects.add(g);
+    }
+
+    public void addPulse(Point p, double radius) {
+        effects.add(new Pulse(p, radius));
+    }
+
+    public void addPulse(Point p, double radius, Color glow) {
+        effects.add(new Pulse(p, radius, glow));
+    }
+
+    public void genExplosion(Point p, double size) {
+        Vector vSize = new Vector(size, 0);
+        vSize.clamp(1.5);
+        addSparks(StdRandom.uniform(5, 8), p, vSize, 360);
+        addPulse(p, size);
     }
 
     // update effects method
     public void update(Vector scroll, double dt) {
-        for (Effect effect : effects) {
-            effect.update(dt);
-            effect.draw(scroll);
-        }
+        effects.forEach(e -> {
+            e.update(dt);
+            e.draw(scroll);
+        });
 
         effects.removeIf(Effect::isDead);
     }

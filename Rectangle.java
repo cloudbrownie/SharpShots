@@ -1,10 +1,14 @@
 public class Rectangle {
 
+    // instance vars -----------------------------------------------------------
+
     // store x and y values for the left, right, top, and bottom sides
-    public double lft;
-    public double rht;
-    public double top;
-    public double bot;
+    private double lft;
+    private double rht;
+    private double top;
+    private double bot;
+
+    // constructors ------------------------------------------------------------
 
     // constructor to make a rectangle with known side locations
     public Rectangle(double lft, double rht, double top, double bot) {
@@ -36,12 +40,77 @@ public class Rectangle {
         }
     }
 
+    // constructor that copies another rectangle
+    public Rectangle(Rectangle r) {
+        lft = r.lft;
+        rht = r.rht;
+        top = r.top;
+        bot = r.bot;
+    }
+
+    // getters -----------------------------------------------------------------
+
+    public double getLft() {
+        return lft;
+    }
+
+    public double getRht() {
+        return rht;
+    }
+
+    public double getTop() {
+        return top;
+    }
+
+    public double getBot() {
+        return bot;
+    }
+
+    // other methods -----------------------------------------------------------
+
+    // return boolean if rectangle contains a point
+    public boolean contains(Point p) {
+        return p.x > lft && p.x < rht && p.y < top && p.y > bot;
+    }
+
+    // return the width of the rectangle
+    public double width() {
+        return rht - lft;
+    }
+
+    // return the height of the rectangle
+    public double height() {
+        return top - bot;
+    }
+
+    // return the area of the rectangle
+    public double area() {
+        return width() * height();
+    }
+
+    // return the center of the rectangle
+    public Point center() {
+        return new Point(lft + width() / 2, bot + height() / 2);
+    }
+
+    // return the overlap rectangle of two rectangles
+    public Rectangle overlap(Rectangle that) {
+        return new Rectangle(Math.max(lft, that.lft), Math.min(rht, that.rht),
+                             Math.min(top, that.top), Math.max(bot, that.bot));
+    }
+
+    // return boolean of the collision between two rectangles
+    public boolean collide(Rectangle that) {
+        Rectangle rect = overlap(that);
+        return !(rect.rht - rect.lft < 0 || rect.top - rect.bot < 0);
+    }
+
     // translate method
     public void translate(double dx, double dy) {
-        lft += dx;
-        rht += dx;
-        top += dy;
-        bot += dy;
+        lft = lft + dx;
+        rht = rht + dx;
+        top = top + dy;
+        bot = bot + dy;
     }
 
     // change the points of the rectangle to allow it to encompass a new point
@@ -71,35 +140,6 @@ public class Rectangle {
         }
     }
 
-    // return the overlap rectangle of two rectangles
-    public Rectangle overlap(Rectangle that) {
-        return new Rectangle(Math.max(lft, that.lft),
-                             Math.min(rht, that.rht),
-                             Math.min(top, that.top),
-                             Math.max(bot, that.bot));
-    }
-
-    // return the width of the rectangle
-    public double width() {
-        return rht - lft;
-    }
-
-    // return the height of the rectangle
-    public double height() {
-        return top - bot;
-    }
-
-    // return the area of the rectangle
-    public double area() {
-        return width() * height();
-    }
-
-    // return boolean of the collision between two rectangles
-    public boolean collide(Rectangle that) {
-        Rectangle rect = overlap(that);
-        return !(rect.rht - rect.lft < 0 || rect.top - rect.bot < 0);
-    }
-
     // draw method
     public void draw(Vector scroll) {
         double[] x = { lft, lft, rht, rht };
@@ -115,6 +155,10 @@ public class Rectangle {
     public void drawDebug(Vector scroll) {
         draw(scroll);
         StdDraw.circle(lft + width() / 2, bot + height() / 2, 0.1);
+    }
+
+    public String toString() {
+        return String.format("(%.2f, %.2f), (%.2f, %.2f)", lft, top, rht, bot);
     }
 
     public static void main(String[] args) {
